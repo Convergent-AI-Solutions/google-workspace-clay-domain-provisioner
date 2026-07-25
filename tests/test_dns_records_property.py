@@ -14,7 +14,7 @@ pytest.importorskip("hypothesis", reason="hypothesis is an optional dev dependen
 from hypothesis import given, settings  # noqa: E402
 from hypothesis import strategies as st  # noqa: E402
 
-from cold_email_domain_provisioner.dns_records import (  # noqa: E402
+from google_workspace_clay_provisioner.dns_records import (  # noqa: E402
     DMARC_POLICIES,
     dkim_public_key,
     dkim_record,
@@ -24,7 +24,7 @@ from cold_email_domain_provisioner.dns_records import (  # noqa: E402
     normalize_txt_value,
     spf_record,
 )
-from cold_email_domain_provisioner.verify import evaluate_dmarc, evaluate_mx  # noqa: E402
+from google_workspace_clay_provisioner.verify import evaluate_dmarc, evaluate_mx  # noqa: E402
 
 domains = st.from_regex(r"\A[a-z0-9]([a-z0-9-]{0,18}[a-z0-9])?\.com\Z", fullmatch=True)
 base64_keys = st.text(

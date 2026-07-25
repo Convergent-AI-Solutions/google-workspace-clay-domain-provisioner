@@ -7,8 +7,8 @@ one, so it is tested directly against realistic Cloudflare payloads.
 
 from __future__ import annotations
 
-from cold_email_domain_provisioner.cloudflare.dns import find_match
-from cold_email_domain_provisioner.dns_records import (
+from google_workspace_clay_provisioner.cloudflare.dns import find_match
+from google_workspace_clay_provisioner.dns_records import (
     dkim_record,
     dmarc_record,
     mx_records,

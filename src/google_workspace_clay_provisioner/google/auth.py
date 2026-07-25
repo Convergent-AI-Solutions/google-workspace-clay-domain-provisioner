@@ -34,7 +34,7 @@ ADMIN_SCOPES: tuple[str, ...] = (
 #: Added only when license assignment is requested, to keep the consent minimal.
 LICENSING_SCOPES: tuple[str, ...] = (LICENSING_SCOPE,)
 
-TOKEN_CACHE_DIR = Path.home() / ".cold-email-domain-provisioner"
+TOKEN_CACHE_DIR = Path.home() / ".gwclay"
 
 
 def build_credentials(

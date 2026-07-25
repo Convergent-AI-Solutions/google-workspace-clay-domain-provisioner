@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from cold_email_domain_provisioner.suggest import (
+from google_workspace_clay_provisioner.suggest import (
     generate_candidates,
     is_valid_label,
     root_label,

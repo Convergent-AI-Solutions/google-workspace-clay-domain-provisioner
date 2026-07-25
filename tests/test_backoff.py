@@ -6,7 +6,7 @@ import random
 
 import pytest
 
-from cold_email_domain_provisioner.backoff import (
+from google_workspace_clay_provisioner.backoff import (
     BackoffPolicy,
     delays,
     jittered_delay,

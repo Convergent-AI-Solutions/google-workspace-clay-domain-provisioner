@@ -1,52 +1,73 @@
-# cold-email-domain-provisioner
+# google-workspace-clay-domain-provisioner
 
-Provision a new cold-email sending domain end to end: pick an available `.com`,
-register it with Cloudflare, add it to Google Workspace as a secondary domain,
-create the sending mailbox, publish the MX, SPF, DKIM and DMARC records, verify
-them against public resolvers, and prepare the Clay import.
+Automates cold-email sending domain and mailbox setup for **Google Workspace**
+and **Clay**.
 
-Nothing in this tool is specific to any company. Every value comes from a
+Give it your primary domain. It suggests an available `.com`, registers it with
+Cloudflare, adds it to Google Workspace as a secondary domain, creates the
+sending mailbox, publishes the MX, SPF, DKIM and DMARC records Workspace mail
+needs, verifies them against public resolvers, and prepares the Clay campaign
+import.
+
+This is deliberately not a general-purpose registrar or DNS tool. It assumes one
+stack — domains at Cloudflare, mailboxes on Google Workspace, campaigns in Clay —
+and hard-codes nothing else about your organisation: every value comes from a
 command-line flag, an environment variable, or an interactive prompt.
+
+## The stack it assumes
+
+| Layer | Service | Why it is fixed |
+| --- | --- | --- |
+| Registrar and DNS | Cloudflare | Its API both checks availability and registers, at cost, with WHOIS privacy on by default |
+| Mailbox host | Google Workspace | Secondary domains plus per-domain DKIM, driven by the Admin SDK |
+| Campaign sender | Clay | Where the finished mailbox is used, with warmup |
+
+Swapping any layer means changing code, not configuration.
 
 ## What is automated, and what is not
 
-Two of the seven steps cannot be fully automated today, because the providers
-expose no application programming interface (API) for them. The tool does the
+Two of the seven steps cannot be fully automated, because Google and Clay expose
+no application programming interface (API) for them. The tool does the
 automatable part of each and hands you the rest with the exact values you need.
 
 | Step | Status | How |
 | --- | --- | --- |
 | 1. Suggest available `.com` domains | Automated | Cloudflare Registrar `domain-search` and `domain-check` |
 | 2. Register the domain | Automated | Cloudflare Registrar `registrations` |
-| 3. Add as a Workspace secondary domain and verify ownership | Automated | Admin SDK `domains.insert`, then Site Verification API with a DNS TXT token |
+| 3. Add as a Workspace secondary domain and verify ownership | Automated | Admin SDK `domains.insert`, then the Site Verification API with a DNS TXT token |
 | 4. Create the sending mailbox | Automated | Admin SDK `users.insert` |
 | 5. MX, SPF and DMARC records | Automated | Cloudflare DNS API |
 | 5. DKIM record | **Half manual** | Google generates the key pair and shows the public half only in the Admin console. The tool prints the exact path, waits for you to paste the value, then publishes and checks the TXT record. |
 | 6. Verify all four records | Automated | Public DNS resolvers, not Cloudflare's own API |
 | 7. Add the mailbox to Clay with warmup on | **Manual** | Clay connects mailboxes through OAuth, manual SMTP entry, or an SMTP CSV upload, all in its own interface. It publishes no endpoint for adding an email account or enabling warmup. The tool writes the CSV and a checklist. |
 
-### Why DKIM cannot be automated
+### Why the Google DKIM step cannot be automated
 
 Google generates the DKIM key pair, keeps the private half, and exposes the
-public half only in the Admin console. Google Workspace does not accept an
-imported key, so there is no way to compute or supply the `p=` value yourself.
-Publishing the record once you have that value is a normal Cloudflare TXT write,
-which this tool does.
+public half only in the Admin console, per domain. Google Workspace does not
+accept an imported key, so there is no way to compute or supply the `p=` value
+yourself. Publishing the record once you have that value is a normal Cloudflare
+TXT write, which this tool does, including joining a key that arrives split
+across quoted strings and stripping the line breaks a console paste introduces.
 
 ### Why the Clay step cannot be automated
 
-As of 2026-07, Clay's documented ways to add a sending mailbox are Google
-OAuth, Microsoft OAuth, and SMTP entered manually or uploaded as a CSV. There is
-no documented REST endpoint for creating an email account or toggling warmup.
-Two consequences:
+As of 2026-07, Clay's documented ways to add a sending mailbox are Google OAuth,
+Microsoft OAuth, and SMTP entered manually or uploaded as a CSV. There is no
+documented REST endpoint for creating an email account or toggling warmup. Two
+consequences:
 
-- The CSV column names in [`clay.py`](src/cold_email_domain_provisioner/clay.py)
-  are a starting point, not a verified contract. Clay does not publish its
-  upload schema. Check them against the upload dialog the first time, then pin
-  whatever it actually asks for.
+- The CSV column names in
+  [`clay.py`](src/google_workspace_clay_provisioner/clay.py) are a starting
+  point, not a verified contract. Clay does not publish its upload schema. Check
+  them against the upload dialog the first time, then pin whatever it actually
+  asks for.
 - The SMTP password cannot be filled in automatically. Gmail SMTP needs an app
   password, app passwords require 2-step verification on the account, and Google
   exposes no API for creating one. The CSV ships a placeholder.
+
+A Workspace admin must also authorise the Clay Sequencer app for each new domain,
+or the OAuth sign-in returns an access error.
 
 ## Prerequisites
 
@@ -77,16 +98,24 @@ A **secondary domain** is not a **domain alias**. An alias mirrors the addresses
 of existing users; a secondary domain holds its own users. A sending mailbox
 needs its own account, so this tool adds a secondary domain.
 
+**Clay**
+
+- A workspace with Campaigns, and admin rights to authorise the Clay Sequencer
+  app for the new domain.
+
 ## Install
 
 ```bash
-git clone https://github.com/Convergent-AI-Solutions/cold-email-domain-provisioner.git
-cd cold-email-domain-provisioner
-python -m venv .venv && . .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+git clone https://github.com/Convergent-AI-Solutions/google-workspace-clay-domain-provisioner.git
 ```
 
-Python 3.11 or newer. The command is `cedp`.
+```bash
+cd google-workspace-clay-domain-provisioner && python -m venv .venv && pip install -e ".[dev]"
+```
+
+Python 3.11 or newer. Activate the virtual environment first on Windows with
+`.venv\Scripts\activate`, elsewhere with `. .venv/bin/activate`. The command is
+`gwclay`.
 
 ## Configure
 
@@ -99,53 +128,57 @@ the mailbox password is printed once and not saved.
 
 ## Use
 
-### One step at a time
-
-```bash
-cedp suggest example.com --limit 20 --available-only
-```
-
-```bash
-cedp purchase getexample.com
-```
-
-```bash
-cedp workspace getexample.com
-```
-
-```bash
-cedp mailbox getexample.com --local-part connect
-```
-
-```bash
-cedp records getexample.com --dmarc-rua dmarc@example.com
-```
-
-```bash
-cedp dkim getexample.com
-```
-
-```bash
-cedp verify getexample.com
-```
-
-```bash
-cedp clay getexample.com
-```
-
 ### All of it
 
 ```bash
-cedp run example.com --dmarc-rua dmarc@example.com
+gwclay run example.com --dmarc-rua dmarc@example.com
 ```
 
-`run` chains every step, pauses at the DKIM prompt, and finishes by writing a
-handoff checklist listing what is left to do in Clay.
+`run` chains every step, pauses at the DKIM prompt for the value from the Admin
+console, and finishes by writing a handoff checklist listing what is left to do
+in Clay.
+
+### One step at a time
+
+Each step is also its own command, so a failed or manual step can be re-run on
+its own without repeating the ones before it.
+
+```bash
+gwclay suggest example.com --limit 20 --available-only
+```
+
+```bash
+gwclay purchase getexample.com
+```
+
+```bash
+gwclay workspace getexample.com
+```
+
+```bash
+gwclay mailbox getexample.com --local-part connect
+```
+
+```bash
+gwclay records getexample.com --dmarc-rua dmarc@example.com
+```
+
+```bash
+gwclay dkim getexample.com
+```
+
+```bash
+gwclay verify getexample.com
+```
+
+```bash
+gwclay clay getexample.com
+```
 
 ### Check where a domain got to
 
 ```bash
-cedp status getexample.com
+gwclay status getexample.com
 ```
 
 ## Safety
@@ -185,6 +218,10 @@ configurable.
 `v=spf1` record on a name a permanent error, and receivers treat it as no SPF at
 all. The verifier fails on it.
 
+**MX defaults to the single `smtp.google.com` host.** The older five-record
+Google layout is available with `--mx-mode legacy` for estates standardised on
+it.
+
 **Candidate names are deliberately unimaginative.** The generator applies a small
 set of prefixes and suffixes to your domain's root label. It does not produce
 misspellings or lookalikes, because a sending domain a recipient cannot connect
@@ -192,8 +229,8 @@ to your business hurts reply rates. Hyphenated variants are opt-in.
 
 ## Sending responsibly
 
-This tool sets up authenticated sending infrastructure. It does not send mail
-and takes no view on your list. Cold outbound email is regulated in most
+This tool sets up authenticated sending infrastructure. It does not send mail and
+takes no view on your list. Cold outbound email is regulated in most
 jurisdictions, including the CAN-SPAM Act in the United States, the Privacy and
 Electronic Communications Regulations in the United Kingdom, and the Spam Act
 2003 in Australia. Accurate sender identification, a working unsubscribe path,
@@ -214,6 +251,9 @@ candidate generation, record building and normalisation, the verification
 judgements, and record matching all have unit tests, plus Hypothesis property
 tests for the parts where an off-by-one character would silently break mail
 authentication. Property tests skip cleanly if Hypothesis is not installed.
+
+Verified on Python 3.12.10. The CI matrix declares 3.11, 3.12 and 3.13, and has
+not yet run.
 
 ## Licence
 

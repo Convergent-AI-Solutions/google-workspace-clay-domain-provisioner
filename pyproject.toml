@@ -3,14 +3,24 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cold-email-domain-provisioner"
+name = "google-workspace-clay-domain-provisioner"
 version = "0.1.0"
-description = "Provision a cold-email sending domain end to end: Cloudflare registration, Google Workspace secondary domain and mailbox, MX/SPF/DKIM/DMARC records, and independent verification."
+description = "Automate cold-email sending domain and mailbox setup for Google Workspace and Clay: Cloudflare domain registration, Workspace secondary domain and mailbox, MX/SPF/DKIM/DMARC records, independent verification, and Clay campaign import."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Convergent AI Solutions" }]
-keywords = ["cold-email", "deliverability", "cloudflare", "google-workspace", "spf", "dkim", "dmarc"]
+keywords = [
+    "cold-email",
+    "clay",
+    "google-workspace",
+    "cloudflare",
+    "deliverability",
+    "spf",
+    "dkim",
+    "dmarc",
+    "email-warmup",
+]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -35,11 +45,11 @@ dependencies = [
 dev = ["pytest>=8", "hypothesis>=6", "ruff>=0.5"]
 
 [project.urls]
-Homepage = "https://github.com/Convergent-AI-Solutions/cold-email-domain-provisioner"
-Issues = "https://github.com/Convergent-AI-Solutions/cold-email-domain-provisioner/issues"
+Homepage = "https://github.com/Convergent-AI-Solutions/google-workspace-clay-domain-provisioner"
+Issues = "https://github.com/Convergent-AI-Solutions/google-workspace-clay-domain-provisioner/issues"
 
 [project.scripts]
-cedp = "cold_email_domain_provisioner.cli:app"
+gwclay = "google_workspace_clay_provisioner.cli:app"
 
 [tool.setuptools.packages.find]
 where = ["src"]

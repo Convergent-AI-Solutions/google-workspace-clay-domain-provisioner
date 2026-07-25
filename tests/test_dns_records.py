@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from cold_email_domain_provisioner.dns_records import (
+from google_workspace_clay_provisioner.dns_records import (
     LEGACY_MX_HOSTS,
     SINGLE_MX_HOST,
     dkim_public_key,
@@ -43,7 +43,7 @@ def test_unknown_mx_mode_is_rejected() -> None:
 
 def test_mx_records_require_a_priority() -> None:
     """An MX record without a priority is not valid DNS."""
-    from cold_email_domain_provisioner.dns_records import DnsRecordSpec
+    from google_workspace_clay_provisioner.dns_records import DnsRecordSpec
 
     with pytest.raises(ValueError, match="priority"):
         DnsRecordSpec(type="MX", name="example.com", content="smtp.google.com")

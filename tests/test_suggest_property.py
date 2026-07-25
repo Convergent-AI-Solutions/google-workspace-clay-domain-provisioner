@@ -12,7 +12,7 @@ pytest.importorskip("hypothesis", reason="hypothesis is an optional dev dependen
 from hypothesis import given, settings  # noqa: E402
 from hypothesis import strategies as st  # noqa: E402
 
-from cold_email_domain_provisioner.suggest import (  # noqa: E402
+from google_workspace_clay_provisioner.suggest import (  # noqa: E402
     generate_candidates,
     is_valid_label,
     root_label,

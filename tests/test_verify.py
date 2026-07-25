@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from cold_email_domain_provisioner.verify import (
+from google_workspace_clay_provisioner.verify import (
     evaluate_dkim,
     evaluate_dmarc,
     evaluate_mx,

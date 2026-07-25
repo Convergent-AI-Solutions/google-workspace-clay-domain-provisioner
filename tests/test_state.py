@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from cold_email_domain_provisioner.state import (
+from google_workspace_clay_provisioner.state import (
     ORDERED_STEPS,
     STEP_MAILBOX,
     STEP_REGISTER,

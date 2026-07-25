@@ -1,4 +1,4 @@
-"""Command-line interface.
+"""Command-line interface for the Google Workspace and Clay sending-domain setup.
 
 Every step is its own command so a failed or manual step can be re-run on its
 own, and ``run`` chains them for a fresh domain. Nothing is organisation
@@ -43,9 +43,10 @@ from .verify import DnsLookup
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Provision a cold-email sending domain: register it, add it to Google "
-    "Workspace, create the mailbox, publish MX/SPF/DKIM/DMARC, verify, and "
-    "prepare the Clay import.",
+    help="Set up a cold-email sending domain and mailbox for Google Workspace "
+    "and Clay: register the domain at Cloudflare, add it to Workspace as a "
+    "secondary domain, create the mailbox, publish MX/SPF/DKIM/DMARC, verify "
+    "against public resolvers, and prepare the Clay import.",
 )
 
 
@@ -383,7 +384,7 @@ def dkim(
     )
     typer.echo("")
     typer.echo("Now return to the Admin console and click Start authentication.")
-    typer.echo(f"Then confirm it resolves:  cedp verify {domain}")
+    typer.echo(f"Then confirm it resolves:  gwclay verify {domain}")
     _ = spec
 
 
@@ -626,7 +627,7 @@ def run(
     if not report.passed:
         typer.secho(
             f"Verification is incomplete: {', '.join(c.name for c in report.failures)}. "
-            f"Re-run: cedp verify {target}",
+            f"Re-run: gwclay verify {target}",
             fg=typer.colors.YELLOW,
         )
 
