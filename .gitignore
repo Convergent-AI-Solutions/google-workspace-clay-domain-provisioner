@@ -1,0 +1,27 @@
+# Secrets and credentials — never commit
+.env
+*.env
+!.env.example
+credentials.json
+client_secret*.json
+service-account*.json
+*-sa.json
+token.json
+
+# Per-run state and generated artefacts (may contain domain and mailbox detail)
+.provisioner-state/
+out/
+*.clay.csv
+*-checklist.md
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/

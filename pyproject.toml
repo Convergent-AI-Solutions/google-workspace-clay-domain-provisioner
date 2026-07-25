@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cold-email-domain-provisioner"
+version = "0.1.0"
+description = "Provision a cold-email sending domain end to end: Cloudflare registration, Google Workspace secondary domain and mailbox, MX/SPF/DKIM/DMARC records, and independent verification."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Convergent AI Solutions" }]
+keywords = ["cold-email", "deliverability", "cloudflare", "google-workspace", "spf", "dkim", "dmarc"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Communications :: Email",
+    "Topic :: System :: Systems Administration",
+]
+dependencies = [
+    "httpx>=0.27",
+    "typer>=0.12",
+    "dnspython>=2.6",
+    "python-dotenv>=1.0",
+    "google-api-python-client>=2.130",
+    "google-auth>=2.30",
+    "google-auth-oauthlib>=1.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "hypothesis>=6", "ruff>=0.5"]
+
+[project.urls]
+Homepage = "https://github.com/Convergent-AI-Solutions/cold-email-domain-provisioner"
+Issues = "https://github.com/Convergent-AI-Solutions/cold-email-domain-provisioner/issues"
+
+[project.scripts]
+cedp = "cold_email_domain_provisioner.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+# Typer declares CLI options as call-valued argument defaults, and Path is
+# immutable, so B008 does not apply to either.
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["typer.Option", "typer.Argument", "pathlib.Path"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
