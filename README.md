@@ -105,17 +105,48 @@ needs its own account, so this tool adds a secondary domain.
 
 ## Install
 
+Needs Python 3.11 or newer. Clone the repository and create a virtual
+environment:
+
 ```bash
 git clone https://github.com/Convergent-AI-Solutions/google-workspace-clay-domain-provisioner.git
+cd google-workspace-clay-domain-provisioner
+python -m venv .venv
 ```
+
+Activate it. On macOS and Linux:
 
 ```bash
-cd google-workspace-clay-domain-provisioner && python -m venv .venv && pip install -e ".[dev]"
+source .venv/bin/activate
 ```
 
-Python 3.11 or newer. Activate the virtual environment first on Windows with
-`.venv\Scripts\activate`, elsewhere with `. .venv/bin/activate`. The command is
-`gwclay`.
+On Windows, in PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Then install:
+
+```bash
+pip install -e ".[dev]"
+```
+
+Activate before installing. Creating a virtual environment does not put it on
+`PATH`, so a bare `pip` still resolves to whatever is ambient: usually the system
+Python, where the package and its dependencies land outside `.venv`, and on a
+machine with no ambient pip, nothing at all. On a distribution with an externally
+managed Python, such as Debian, Ubuntu, or Homebrew, that install is refused
+outright.
+
+To skip activation, call the environment's interpreter directly instead:
+
+```bash
+.venv/bin/python -m pip install -e ".[dev]"
+```
+
+On Windows that path is `.venv\Scripts\python`. The command this installs is
+`gwclay`, available as `.venv/bin/gwclay` when the environment is not activated.
 
 ## Configure
 
