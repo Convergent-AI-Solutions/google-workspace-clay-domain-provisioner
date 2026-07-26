@@ -139,14 +139,21 @@ machine with no ambient pip, nothing at all. On a distribution with an externall
 managed Python, such as Debian, Ubuntu, or Homebrew, that install is refused
 outright.
 
-To skip activation, call the environment's interpreter directly instead:
+To skip activation, call the environment's interpreter directly instead. On macOS
+and Linux:
 
 ```bash
 .venv/bin/python -m pip install -e ".[dev]"
 ```
 
-On Windows that path is `.venv\Scripts\python`. The command this installs is
-`gwclay`, available as `.venv/bin/gwclay` when the environment is not activated.
+On Windows:
+
+```powershell
+.venv\Scripts\python.exe -m pip install -e ".[dev]"
+```
+
+Either way the command this installs is `gwclay`. Without activation, run it as
+`.venv/bin/gwclay` on macOS and Linux, or `.venv\Scripts\gwclay.exe` on Windows.
 
 ## Configure
 
