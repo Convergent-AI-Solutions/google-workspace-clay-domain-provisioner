@@ -407,7 +407,7 @@ def verify(
 
     typer.echo(f"Verifying {domain} against {', '.join(cli.lookup().resolvers)}")
     report = steps.verify_records(
-        domain, config, state, lookup=cli.lookup(), policy=policy, echo=echo
+        domain, config, state, lookup=cli.lookup(), policy=policy, dry_run=cli.dry_run, echo=echo
     )
 
     typer.echo("")
@@ -440,6 +440,7 @@ def clay(
         state,
         output_dir=cli.paths.output_dir,
         daily_limit=daily_limit,
+        dry_run=cli.dry_run,
         echo=echo,
     )
     typer.echo("")
@@ -485,7 +486,13 @@ def checklist(
 
     specs = steps.build_mail_specs(domain, dns_config)
     report = steps.verify_records(
-        domain, dns_config, state, lookup=cli.lookup(), policy=BackoffPolicy(attempts=1), echo=echo
+        domain,
+        dns_config,
+        state,
+        lookup=cli.lookup(),
+        policy=BackoffPolicy(attempts=1),
+        dry_run=cli.dry_run,
+        echo=echo,
     )
     summary = RunSummary(
         domain=domain,
@@ -599,12 +606,24 @@ def run(
 
     _section("Step 6: verify")
     report = steps.verify_records(
-        target, dns_config, state, lookup=cli.lookup(), expected_dkim_key=dkim_key, echo=echo
+        target,
+        dns_config,
+        state,
+        lookup=cli.lookup(),
+        expected_dkim_key=dkim_key,
+        dry_run=cli.dry_run,
+        echo=echo,
     )
 
     _section("Step 7: prepare the Clay import")
     csv_path = steps.prepare_clay_import(
-        target, email, mailbox_config, state, output_dir=cli.paths.output_dir, echo=echo
+        target,
+        email,
+        mailbox_config,
+        state,
+        output_dir=cli.paths.output_dir,
+        dry_run=cli.dry_run,
+        echo=echo,
     )
 
     summary = RunSummary(
