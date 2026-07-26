@@ -47,6 +47,10 @@ DEFAULT_SUFFIXES: tuple[str, ...] = (
 _LABEL_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
 _STRIP_SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*://")
 
+#: Second-level labels that form part of a public suffix, as in ``acme.com.au``
+#: or ``acme.co.uk``, rather than being the registrable name themselves.
+_SECOND_LEVEL_SUFFIXES = frozenset({"com", "co", "net", "org", "gov", "edu"})
+
 
 @dataclass(frozen=True)
 class Candidate:
@@ -56,30 +60,45 @@ class Candidate:
     pattern: str
 
 
+def _public_suffix_length(labels: list[str]) -> int:
+    """How many trailing labels form the public suffix: two, or one.
+
+    Recognises the common second-level suffixes (``com.au``, ``co.uk``) from
+    ``_SECOND_LEVEL_SUFFIXES``. That is not the Public Suffix List, so an
+    uncommon multi-label suffix reads as a single label. Getting it wrong
+    yields a less apt candidate name, never an invalid one, and the
+    availability check is authoritative either way.
+    """
+    if len(labels) >= 3 and labels[-2] in _SECOND_LEVEL_SUFFIXES:
+        return 2
+    return 1
+
+
 def root_label(seed: str) -> str:
     """Reduce a seed such as ``https://www.acme.com/x`` to ``acme``.
 
     Accepts a bare label, a hostname, or a URL. Raises ``ValueError`` when
     nothing usable is left, so the caller can prompt again rather than
     generating nonsense from an empty string.
+
+    The registrable label is the one directly before the public suffix. Deriving
+    it that way means a leading ``www`` needs no special handling: it drops out
+    when it sits above the registrable label (``www.acme.com`` gives ``acme``)
+    and survives when it *is* the registrable label (``www.com`` gives ``www``).
     """
     text = seed.strip().lower()
     text = _STRIP_SCHEME.sub("", text)
     text = text.split("/", 1)[0].split("@")[-1].split(":", 1)[0]
-    text = text.removeprefix("www.")
 
     labels = [part for part in text.split(".") if part]
     if not labels:
         raise ValueError(f"no usable domain label in seed: {seed!r}")
 
-    # Drop the public suffix when present. Two-label suffixes such as
-    # "com.au" are handled by dropping both when a third label exists.
-    if len(labels) >= 3 and labels[-2] in {"com", "co", "net", "org", "gov", "edu"}:
-        candidate = labels[-3]
-    elif len(labels) >= 2:
-        candidate = labels[-2]
-    else:
+    if len(labels) == 1:
         candidate = labels[0]
+    else:
+        index = len(labels) - _public_suffix_length(labels) - 1
+        candidate = labels[max(index, 0)]
 
     if not is_valid_label(candidate):
         raise ValueError(f"seed root label is not a valid DNS label: {candidate!r}")

@@ -30,6 +30,28 @@ def test_root_label_reduces_seeds_to_the_business_name(seed: str, expected: str)
     assert root_label(seed) == expected
 
 
+@pytest.mark.parametrize(
+    ("seed", "expected"),
+    [
+        ("www.com", "www"),
+        ("www.co.uk", "www"),
+        ("www.net", "www"),
+        ("www.acme.com", "acme"),
+        ("www.acme.com.au", "acme"),
+        ("https://www.acme.co.uk/pricing", "acme"),
+    ],
+)
+def test_www_is_dropped_only_when_it_is_a_subdomain(seed: str, expected: str) -> None:
+    """`www` is a subdomain in www.acme.com but the registrable label in www.com.
+
+    Stripping a leading "www." unconditionally reduced www.com to the public
+    suffix "com", so candidates were generated from "com". The idempotence
+    property test catches it, but only on a run where Hypothesis happens to draw
+    "www", which is why these cases are pinned explicitly here.
+    """
+    assert root_label(seed) == expected
+
+
 @pytest.mark.parametrize("seed", ["", "   ", ".", "..", "https://"])
 def test_root_label_rejects_seeds_with_no_usable_label(seed: str) -> None:
     """An unusable seed raises rather than producing nonsense candidates."""
