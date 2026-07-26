@@ -51,12 +51,23 @@ def get_zone_id(client: CloudflareClient, account_id: str, domain: str) -> str |
     return None
 
 
-def create_zone(client: CloudflareClient, account_id: str, domain: str) -> str:
+def create_zone(
+    client: CloudflareClient,
+    account_id: str,
+    domain: str,
+    *,
+    dry_run: bool = False,
+) -> str | None:
     """Create a full-setup zone for ``domain`` and return its id.
 
     Registering through Cloudflare Registrar normally creates the zone as part
     of registration, so this is the path for a domain registered elsewhere.
+
+    Returns ``None`` in a dry run, having created nothing.
     """
+    if dry_run:
+        return None
+
     result = client.post(
         "/zones",
         json={"name": domain, "account": {"id": account_id}, "type": "full"},
@@ -73,13 +84,20 @@ def require_zone_id(
     domain: str,
     *,
     create_if_missing: bool = False,
-) -> str:
-    """The zone id, creating the zone first when asked and it is absent."""
+    dry_run: bool = False,
+) -> str | None:
+    """The zone id, creating the zone first when asked and it is absent.
+
+    Returns ``None`` in exactly one case: a dry run where the zone does not
+    exist yet, so there is no id to report because nothing was created. Callers
+    must read ``None`` as "nothing further here can be previewed", not as a
+    failure. Every other missing-zone case still raises.
+    """
     zone_id = get_zone_id(client, account_id, domain)
     if zone_id:
         return zone_id
     if create_if_missing:
-        return create_zone(client, account_id, domain)
+        return create_zone(client, account_id, domain, dry_run=dry_run)
     raise CloudflareError(
         f"no Cloudflare zone found for {domain}. If the domain is registered "
         f"elsewhere, add it to this account first, or re-run with the "

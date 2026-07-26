@@ -196,21 +196,30 @@ def verify_domain_ownership(
 
     The wait is not optional: asking Google to verify before the token resolves
     fails, and repeated failures are rate-limited.
+
+    A dry run returns before requesting a token. ``getToken`` is an authenticated
+    Google call, so fetching one to describe a run nobody asked to perform would
+    both need live credentials and consume a token that is never published.
     """
     if state.is_done(STEP_VERIFY_OWNERSHIP) or gdomains.is_verified(directory, domain, customer_id):
         echo(f"Ownership of {domain} is already verified.")
         state.mark_done(STEP_VERIFY_OWNERSHIP, domain=domain, outcome="already-verified")
         return "already-verified"
 
+    if dry_run:
+        _preview_ownership_verification(
+            client, account_id, domain, create_zone=create_zone, echo=echo
+        )
+        return "would-verify"
+
     token = gsiteverify.get_dns_token(site_verification, domain)
     spec = records_module.site_verification_record(domain, token)
 
     zone_id = cf_dns.require_zone_id(client, account_id, domain, create_if_missing=create_zone)
-    outcome = cf_dns.upsert_record(client, zone_id, spec, dry_run=dry_run)
+    if zone_id is None:  # unreachable outside a dry run; require_zone_id raises instead
+        raise ProvisionerError(f"no Cloudflare zone available for {domain}")
+    outcome = cf_dns.upsert_record(client, zone_id, spec)
     echo(f"Ownership token record: {outcome.action} ({spec.name})")
-
-    if dry_run:
-        return "would-verify"
 
     wait_policy = policy or BackoffPolicy(attempts=12, base_seconds=20, jitter_seconds=10)
     _await_txt(
@@ -290,7 +299,14 @@ def publish_mail_records(
 ) -> tuple[list[DnsRecordSpec], list[cf_dns.UpsertOutcome]]:
     """Publish MX, SPF and DMARC. DKIM is separate — it needs a human first."""
     specs = build_mail_specs(domain, dns_config)
-    zone_id = cf_dns.require_zone_id(client, account_id, domain, create_if_missing=create_zone)
+    zone_id = cf_dns.require_zone_id(
+        client, account_id, domain, create_if_missing=create_zone, dry_run=dry_run
+    )
+    if zone_id is None:
+        echo(f"  [dry run] would create the Cloudflare zone for {domain} first")
+        for spec in specs:
+            echo(f"  [dry run] would create {spec.label or spec.type} at {spec.name}")
+        return specs, []
 
     outcomes = cf_dns.apply_specs(client, zone_id, specs, dry_run=dry_run)
     for outcome in outcomes:
@@ -343,7 +359,15 @@ def publish_dkim_record(
 ) -> tuple[DnsRecordSpec, cf_dns.UpsertOutcome]:
     """Publish the DKIM TXT record from a value generated in the Admin console."""
     spec = records_module.dkim_record(domain, dkim_value, selector=dns_config.dkim_selector)
-    zone_id = cf_dns.require_zone_id(client, account_id, domain, create_if_missing=create_zone)
+    zone_id = cf_dns.require_zone_id(
+        client, account_id, domain, create_if_missing=create_zone, dry_run=dry_run
+    )
+    if zone_id is None:
+        echo(f"  [dry run] would create the Cloudflare zone for {domain} first")
+        outcome = cf_dns.UpsertOutcome(spec, "would-create")
+        echo(f"  [dry run] would create {spec.label} at {spec.name}")
+        return spec, outcome
+
     outcome = cf_dns.upsert_record(client, zone_id, spec, dry_run=dry_run)
     echo(f"  {spec.label}: {outcome.action} ({spec.name})")
 
@@ -366,9 +390,15 @@ def verify_records(
     lookup: DnsLookup | None = None,
     expected_dkim_key: str | None = None,
     policy: BackoffPolicy | None = None,
+    dry_run: bool = False,
     echo: Echo = lambda _: None,
 ) -> VerificationReport:
-    """Check all four records against public resolvers, retrying on propagation."""
+    """Check all four records against public resolvers, retrying on propagation.
+
+    Resolving is read-only, so the checks themselves run in a dry run. The state
+    write does not: recording a step during a preview would make a later real run
+    skip it.
+    """
     expected_hosts = [
         spec.content for spec in records_module.mx_records(domain, dns_config.mx_mode)
     ]
@@ -391,12 +421,13 @@ def verify_records(
     for check in report.checks:
         echo(f"  {check.name}: {'pass' if check.passed else 'FAIL'} - {check.detail}")
 
-    state.mark_done(
-        STEP_VERIFY_RECORDS,
-        domain=domain,
-        passed=report.passed,
-        failures=[check.name for check in report.failures],
-    )
+    if not dry_run:
+        state.mark_done(
+            STEP_VERIFY_RECORDS,
+            domain=domain,
+            passed=report.passed,
+            failures=[check.name for check in report.failures],
+        )
     return report
 
 
@@ -408,9 +439,14 @@ def prepare_clay_import(
     *,
     output_dir: Path,
     daily_limit: int = 20,
+    dry_run: bool = False,
     echo: Echo = lambda _: None,
 ) -> Path:
-    """Write the Clay SMTP import CSV. The rest of step 7 is manual by necessity."""
+    """Write the Clay SMTP import CSV. The rest of step 7 is manual by necessity.
+
+    Writing a file is a change to the operator's filesystem, so a dry run reports
+    the path it would write and leaves the disk alone.
+    """
     row = ClayMailboxRow(
         email=email,
         first_name=mailbox.given_name,
@@ -418,10 +454,43 @@ def prepare_clay_import(
         daily_limit=daily_limit,
         warmup_enabled=True,
     )
-    path = write_clay_csv(output_dir / f"{domain}.clay.csv", [row])
+    path = output_dir / f"{domain}.clay.csv"
+    if dry_run:
+        echo(f"[dry run] would write {path}")
+        return path
+
+    write_clay_csv(path, [row])
     echo(f"Wrote {path}")
     state.mark_done(STEP_CLAY, domain=domain, csv=str(path))
     return path
+
+
+def _preview_ownership_verification(
+    client: CloudflareClient,
+    account_id: str,
+    domain: str,
+    *,
+    create_zone: bool,
+    echo: Echo,
+) -> None:
+    """Describe the ownership-verification step without performing any part of it.
+
+    Only reads: a zone lookup, so the preview can say whether the zone has to be
+    created first. No Google call, so this works without live credentials.
+    """
+    echo(f"[dry run] would request a Google ownership token for {domain}")
+
+    zone_id = cf_dns.get_zone_id(client, account_id, domain)
+    if zone_id is None:
+        if create_zone:
+            echo(f"[dry run] no Cloudflare zone for {domain}; it would be created")
+        else:
+            echo(
+                f"[dry run] no Cloudflare zone for {domain}; a real run would fail "
+                f"here unless the create-zone option is set"
+            )
+    echo(f"[dry run] would publish the token as a TXT record at {domain}")
+    echo("[dry run] would wait for it to resolve publicly, then ask Google to verify")
 
 
 def _await_txt(
