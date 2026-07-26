@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip("hypothesis", reason="hypothesis is an optional dev dependency")
 
-from hypothesis import given, settings  # noqa: E402
+from hypothesis import example, given, settings  # noqa: E402
 from hypothesis import strategies as st  # noqa: E402
 
 from google_workspace_clay_provisioner.suggest import (  # noqa: E402
@@ -58,8 +58,16 @@ def test_generation_is_deterministic_for_any_seed(label: str) -> None:
 
 @settings(max_examples=200)
 @given(label=labels)
+@example(label="www")  # the draw that exposed the unconditional "www." strip
+@example(label="com")
+@example(label="co")
 def test_root_label_is_idempotent(label: str) -> None:
-    """Feeding a reduced label back in must not reduce it further."""
+    """Feeding a reduced label back in must not reduce it further.
+
+    The pinned examples are labels that collide with public-suffix handling.
+    Without them this property only fails on a run where the generator happens
+    to draw one, which here took until after the code had already merged.
+    """
     assert root_label(root_label(f"{label}.com")) == label
 
 
