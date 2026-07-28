@@ -60,15 +60,22 @@ def render_checklist(summary: RunSummary) -> str:
             "",
         ]
 
-    lines += ["## Records published", ""]
+    lines += ["## Expected records", ""]
     if summary.records:
-        lines += ["| Record | Name | Value |", "| --- | --- | --- |"]
+        lines += [
+            "The record values this configuration expects. What actually "
+            "resolves on public DNS is in the Verification section below — read "
+            "that, not this table, to tell what is live.",
+            "",
+            "| Record | Name | Value |",
+            "| --- | --- | --- |",
+        ]
         for spec in summary.records:
             value = spec.content if len(spec.content) <= 80 else f"{spec.content[:77]}..."
             label = spec.label or spec.type
             lines.append(f"| {label} | `{spec.name}` | `{value}` |")
     else:
-        lines.append("No records were published in this run.")
+        lines.append("No records were configured for this run.")
     lines.append("")
 
     lines += ["## Verification", ""]

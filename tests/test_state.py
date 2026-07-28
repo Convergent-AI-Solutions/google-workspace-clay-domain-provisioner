@@ -73,6 +73,41 @@ def test_a_corrupt_state_file_is_moved_aside(tmp_path: Path) -> None:
     assert (tmp_path / "example.com.json.corrupt").is_file()
 
 
+def test_a_second_corruption_does_not_crash(tmp_path: Path) -> None:
+    """Path.replace overwrites on Windows too, and a suffixed name keeps both.
+
+    Regression test: the previous Path.rename raised FileExistsError on Windows
+    when a .json.corrupt file from an earlier corruption already existed,
+    breaking every command including status.
+    """
+    path = tmp_path / "example.com.json"
+    (tmp_path / "example.com.json.corrupt").write_text("first", encoding="utf-8")
+    path.write_text("{not json again", encoding="utf-8")
+
+    state = RunState.load(tmp_path, "example.com")
+
+    assert state.steps == {}
+    assert (tmp_path / "example.com.json.corrupt").is_file()
+
+    # A third corruption in the same process must still be preserved: each
+    # quarantine takes a unique suffix, so none is ever overwritten.
+    path.write_text("{not json a third time", encoding="utf-8")
+    RunState.load(tmp_path, "example.com")
+
+    corrupt_siblings = list(tmp_path.glob("example.com.json.corrupt*"))
+    assert len(corrupt_siblings) == 3
+
+
+def test_a_failed_step_is_not_done(tmp_path: Path) -> None:
+    """A failed verification must not read as a completed step."""
+    state = RunState.load(tmp_path, "example.com")
+    state.mark_failed("verify_dns_records", passed=False, failures=["DKIM"])
+
+    assert not state.is_done("verify_dns_records")
+    assert state.detail("verify_dns_records")["status"] == "failed"
+    assert state.detail("verify_dns_records")["failures"] == ["DKIM"]
+
+
 def test_summary_lists_every_step_in_run_order(tmp_path: Path) -> None:
     """The status command reports all seven steps, done or not."""
     state = RunState.load(tmp_path, "example.com")

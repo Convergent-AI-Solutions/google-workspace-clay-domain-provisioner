@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..errors import ConfigError, GoogleError
+from ..errors import ConfigError
 
 DIRECTORY_DOMAIN_SCOPE = "https://www.googleapis.com/auth/admin.directory.domain"
 DIRECTORY_USER_SCOPE = "https://www.googleapis.com/auth/admin.directory.user"
@@ -92,7 +92,7 @@ def _service_account_credentials(path: Path, scopes: tuple[str, ...], admin_emai
     if not admin_email:
         raise ConfigError(
             "a service account must impersonate a Workspace super admin: supply "
-            "the admin email (CEDP_GOOGLE_ADMIN_EMAIL or --admin-email). The "
+            "the admin email (GWCLAY_GOOGLE_ADMIN_EMAIL or --admin-email). The "
             "service account also needs these scopes authorised for domain-wide "
             f"delegation in the Admin console: {', '.join(scopes)}"
         )
@@ -124,8 +124,13 @@ def _oauth_credentials(path: Path, scopes: tuple[str, ...]):
             credentials.refresh(Request())
             token_path.write_text(credentials.to_json(), encoding="utf-8")
             return credentials
-        except Exception as exc:  # noqa: BLE001 - any refresh failure falls back to re-consent
-            raise GoogleError(f"cached Google token could not be refreshed: {exc}") from exc
+        except Exception:  # noqa: BLE001 - a revoked/expired refresh token re-consents
+            # A refresh token can be revoked, expire through inactivity, or be
+            # invalidated by a password change. Discard the dead token and fall
+            # through to the browser consent flow rather than dead-ending the
+            # tool until the operator deletes the cache by hand.
+            token_path.unlink(missing_ok=True)
+            credentials = None
 
     flow = InstalledAppFlow.from_client_secrets_file(str(path), list(scopes))
     credentials = flow.run_local_server(port=0)

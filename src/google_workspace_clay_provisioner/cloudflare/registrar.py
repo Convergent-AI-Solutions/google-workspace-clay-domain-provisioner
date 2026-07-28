@@ -1,4 +1,4 @@
-"""Cloudflare Registrar: search, availability check, and registration.
+"""Cloudflare Registrar: availability check and registration.
 
 The registration API entered beta in April 2026. Two consequences are handled
 deliberately here:
@@ -77,21 +77,6 @@ class RegistrationResult:
     def pending(self) -> bool:
         """True when Cloudflare accepted the request but has not finished it."""
         return not self.completed
-
-
-def search_domains(
-    client: CloudflareClient,
-    account_id: str,
-    query: str,
-    *,
-    limit: int = 20,
-) -> list[DomainOffer]:
-    """Cached suggestion search. Fast, but not authoritative on availability."""
-    result = client.get(
-        f"/accounts/{account_id}/registrar/domain-search",
-        params={"q": query, "limit": limit},
-    )
-    return [_offer_from(item) for item in _as_items(result)]
 
 
 def check_domains(

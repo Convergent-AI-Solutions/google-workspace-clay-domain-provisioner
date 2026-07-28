@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 STEP_REGISTER = "register_domain"
 STEP_WORKSPACE_DOMAIN = "add_workspace_domain"
@@ -24,6 +25,10 @@ STEP_DNS = "publish_dns_records"
 STEP_DKIM = "publish_dkim_record"
 STEP_VERIFY_RECORDS = "verify_dns_records"
 STEP_CLAY = "prepare_clay_import"
+#: Optional and off by default, so it is deliberately not in ORDERED_STEPS —
+#: it would otherwise show as perpetually "pending" for everyone who does not
+#: use it. Recorded as a detail when licence assignment is requested.
+STEP_LICENSE = "assign_license"
 
 ORDERED_STEPS: tuple[str, ...] = (
     STEP_REGISTER,
@@ -84,8 +89,15 @@ class RunState:
             raw = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             # A corrupt state file must not silently look like "nothing done" —
-            # move it aside so the operator can see what happened.
-            path.rename(path.with_suffix(".json.corrupt"))
+            # move it aside so the operator can see what happened. Path.replace
+            # overwrites atomically on both POSIX and Windows (Path.rename raises
+            # FileExistsError on Windows); a unique suffix keeps every earlier
+            # quarantine so no corruption is ever clobbered, even repeatedly in
+            # one process.
+            quarantine = path.with_suffix(".json.corrupt")
+            if quarantine.exists():
+                quarantine = path.with_suffix(f".json.corrupt.{uuid4().hex}")
+            path.replace(quarantine)
             return cls(domain=domain, path=path, steps={})
         return cls(domain=domain, path=path, steps=raw.get("steps", {}))
 
@@ -111,6 +123,15 @@ class RunState:
         """Record ``step`` as complete and persist immediately."""
         self.steps[step] = {
             "status": "done",
+            "at": datetime.now(UTC).isoformat(timespec="seconds"),
+            **scrub(detail),
+        }
+        self.save()
+
+    def mark_failed(self, step: str, **detail: Any) -> None:
+        """Record ``step`` as attempted but failed, so ``is_done`` stays False."""
+        self.steps[step] = {
+            "status": "failed",
             "at": datetime.now(UTC).isoformat(timespec="seconds"),
             **scrub(detail),
         }

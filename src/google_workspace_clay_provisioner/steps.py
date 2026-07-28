@@ -37,6 +37,7 @@ from .state import (
     STEP_CLAY,
     STEP_DKIM,
     STEP_DNS,
+    STEP_LICENSE,
     STEP_MAILBOX,
     STEP_REGISTER,
     STEP_VERIFY_OWNERSHIP,
@@ -285,6 +286,37 @@ def create_mailbox(
     return email, issued, action
 
 
+def assign_mailbox_license(
+    licensing,
+    email: str,
+    state: RunState,
+    *,
+    product_id: str,
+    sku_id: str,
+    dry_run: bool = False,
+    echo: Echo = lambda _: None,
+) -> str:
+    """Assign a Workspace licence SKU to the mailbox.
+
+    Only needed on accounts that do not auto-assign licences; without one the
+    mailbox exists but cannot send. Product and SKU ids differ per edition, so
+    the caller supplies both.
+    """
+    action = gusers.assign_license(
+        licensing, email, product_id=product_id, sku_id=sku_id, dry_run=dry_run
+    )
+    echo(
+        {
+            "assigned": f"Assigned licence {sku_id} to {email}.",
+            "already-assigned": f"{email} already holds licence {sku_id}.",
+            "would-assign": f"[dry run] would assign licence {sku_id} to {email}",
+        }[action]
+    )
+    if action != "would-assign":
+        state.mark_done(STEP_LICENSE, email=email, sku_id=sku_id, outcome=action)
+    return action
+
+
 def publish_mail_records(
     client: CloudflareClient,
     account_id: str,
@@ -391,13 +423,18 @@ def verify_records(
     expected_dkim_key: str | None = None,
     policy: BackoffPolicy | None = None,
     dry_run: bool = False,
+    record_state: bool = True,
     echo: Echo = lambda _: None,
 ) -> VerificationReport:
     """Check all four records against public resolvers, retrying on propagation.
 
     Resolving is read-only, so the checks themselves run in a dry run. The state
     write does not: recording a step during a preview would make a later real run
-    skip it.
+    skip it. Pass ``record_state=False`` for read-only callers such as the
+    handoff checklist, which must not overwrite a recorded verification result.
+
+    A failed verification is recorded as ``failed``, never ``done``: a domain
+    whose DKIM never resolved must not read as verified in ``status``.
     """
     expected_hosts = [
         spec.content for spec in records_module.mx_records(domain, dns_config.mx_mode)
@@ -421,13 +458,12 @@ def verify_records(
     for check in report.checks:
         echo(f"  {check.name}: {'pass' if check.passed else 'FAIL'} - {check.detail}")
 
-    if not dry_run:
-        state.mark_done(
-            STEP_VERIFY_RECORDS,
-            domain=domain,
-            passed=report.passed,
-            failures=[check.name for check in report.failures],
-        )
+    if not dry_run and record_state:
+        failures = [check.name for check in report.failures]
+        if report.passed:
+            state.mark_done(STEP_VERIFY_RECORDS, domain=domain, passed=True, failures=failures)
+        else:
+            state.mark_failed(STEP_VERIFY_RECORDS, domain=domain, passed=False, failures=failures)
     return report
 
 

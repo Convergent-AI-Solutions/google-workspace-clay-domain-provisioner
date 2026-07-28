@@ -9,9 +9,12 @@ couple of clicks and stops there.
 Two honest limits, both restated in the generated checklist:
 
 * **The CSV header set below is a starting point, not a verified contract.**
-  Clay does not publish its SMTP upload schema. Reconcile these column names
-  against the upload dialog the first time you use it, then pin whatever it
-  actually wants.
+  As of 2026-07 Clay still does not publish its SMTP upload schema, and these
+  column names — ``warmup_enabled`` in particular — have not been confirmed
+  against a live upload dialog. If the upload rejects the file, reconcile the
+  columns against the dialog and pin whatever it actually wants. Until that is
+  done, prefer the Google OAuth route, which ``clay_steps`` lists first and
+  which does not depend on this schema at all.
 * **The SMTP password cannot be filled in automatically.** Gmail SMTP needs an
   app password, app passwords require 2-step verification on the account, and
   Google exposes no API for creating one. The CSV therefore ships a placeholder.
@@ -30,7 +33,8 @@ GMAIL_IMAP_PORT = 993
 
 APP_PASSWORD_PLACEHOLDER = "REPLACE_WITH_APP_PASSWORD"
 
-#: Provisional. See the module docstring — confirm against Clay's upload dialog.
+#: Unverified as of 2026-07. See the module docstring — confirm against Clay's
+#: upload dialog before relying on the CSV route; the OAuth route is safer.
 CLAY_SMTP_CSV_HEADERS: tuple[str, ...] = (
     "email",
     "first_name",
