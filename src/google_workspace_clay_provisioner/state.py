@@ -11,11 +11,11 @@ a credential, so a mailbox password cannot end up on disk through this path.
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 STEP_REGISTER = "register_domain"
 STEP_WORKSPACE_DOMAIN = "add_workspace_domain"
@@ -91,11 +91,12 @@ class RunState:
             # A corrupt state file must not silently look like "nothing done" —
             # move it aside so the operator can see what happened. Path.replace
             # overwrites atomically on both POSIX and Windows (Path.rename raises
-            # FileExistsError on Windows); a suffixed name keeps an earlier
-            # quarantine so a second corruption cannot clobber the first.
+            # FileExistsError on Windows); a unique suffix keeps every earlier
+            # quarantine so no corruption is ever clobbered, even repeatedly in
+            # one process.
             quarantine = path.with_suffix(".json.corrupt")
             if quarantine.exists():
-                quarantine = path.with_suffix(f".json.corrupt.{os.getpid()}")
+                quarantine = path.with_suffix(f".json.corrupt.{uuid4().hex}")
             path.replace(quarantine)
             return cls(domain=domain, path=path, steps={})
         return cls(domain=domain, path=path, steps=raw.get("steps", {}))

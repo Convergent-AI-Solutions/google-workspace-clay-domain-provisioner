@@ -245,6 +245,9 @@ def test_verify_records_read_only_does_not_touch_state(state: RunState) -> None:
     """The checklist verifies read-only; it must not overwrite a recorded result."""
     from google_workspace_clay_provisioner.backoff import BackoffPolicy
 
+    state.mark_done(STEP_VERIFY_RECORDS, domain="getexample.com", passed=True, failures=[])
+    before = state.detail(STEP_VERIFY_RECORDS)
+
     steps.verify_records(
         "getexample.com",
         DnsConfig(),
@@ -254,7 +257,9 @@ def test_verify_records_read_only_does_not_touch_state(state: RunState) -> None:
         record_state=False,
     )
 
-    assert state.detail(STEP_VERIFY_RECORDS) == {}
+    # A read-only run leaves the earlier passing result exactly as it was.
+    assert state.detail(STEP_VERIFY_RECORDS) == before
+    assert state.is_done(STEP_VERIFY_RECORDS)
 
 
 def test_assign_mailbox_license_records_the_outcome(state: RunState) -> None:

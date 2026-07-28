@@ -591,7 +591,8 @@ def run(
 
     _section("Step 2: register the domain")
     if skip_purchase:
-        state.mark_skipped(STEP_REGISTER, "registered outside Cloudflare (--skip-purchase)")
+        if not cli.dry_run:
+            state.mark_skipped(STEP_REGISTER, "registered outside Cloudflare (--skip-purchase)")
         typer.echo("skipped: domain registered outside Cloudflare")
     elif not state.is_done(STEP_REGISTER):
         purchase(ctx, domain=target, years=None)

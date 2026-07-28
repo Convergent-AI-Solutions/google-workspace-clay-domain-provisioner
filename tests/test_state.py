@@ -88,9 +88,14 @@ def test_a_second_corruption_does_not_crash(tmp_path: Path) -> None:
 
     assert state.steps == {}
     assert (tmp_path / "example.com.json.corrupt").is_file()
-    # The earlier quarantine is preserved, so a suffixed sibling now exists too.
+
+    # A third corruption in the same process must still be preserved: each
+    # quarantine takes a unique suffix, so none is ever overwritten.
+    path.write_text("{not json a third time", encoding="utf-8")
+    RunState.load(tmp_path, "example.com")
+
     corrupt_siblings = list(tmp_path.glob("example.com.json.corrupt*"))
-    assert len(corrupt_siblings) == 2
+    assert len(corrupt_siblings) == 3
 
 
 def test_a_failed_step_is_not_done(tmp_path: Path) -> None:
