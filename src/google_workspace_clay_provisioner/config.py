@@ -15,11 +15,11 @@ from .dns_records import DEFAULT_DKIM_SELECTOR, DEFAULT_SPF_VALUE, DMARC_POLICIE
 from .errors import ConfigError
 from .verify import DEFAULT_RESOLVERS
 
-ENV_PREFIX = "CEDP_"
+ENV_PREFIX = "GWCLAY_"
 
 
 def env(name: str, default: str | None = None) -> str | None:
-    """Read a ``CEDP_``-prefixed environment variable, treating blank as unset."""
+    """Read a ``GWCLAY_``-prefixed environment variable, treating blank as unset."""
     value = os.environ.get(f"{ENV_PREFIX}{name}")
     if value is None or not value.strip():
         return default
@@ -37,53 +37,6 @@ def load_env_file(path: Path | None = None) -> None:
     target = path or Path(".env")
     if target.is_file():
         load_dotenv(target, override=False)
-
-
-@dataclass(frozen=True)
-class CloudflareConfig:
-    """Credentials for the Registrar and DNS APIs.
-
-    One token can cover both if it carries Registrar write and Zone DNS edit.
-    """
-
-    api_token: str
-    account_id: str
-
-    @classmethod
-    def from_env(cls) -> CloudflareConfig | None:
-        token, account = env("CF_API_TOKEN"), env("CF_ACCOUNT_ID")
-        if not token or not account:
-            return None
-        return cls(api_token=token, account_id=account)
-
-
-@dataclass(frozen=True)
-class GoogleConfig:
-    """How to authenticate to the Workspace Admin SDK and Site Verification API.
-
-    ``credentials_path`` points at either a service-account JSON with
-    domain-wide delegation, or an OAuth client-secrets JSON. A service account
-    must impersonate a super admin, which is what ``admin_email`` supplies.
-    """
-
-    credentials_path: Path
-    admin_email: str | None = None
-    customer_id: str = "my_customer"
-
-    def __post_init__(self) -> None:
-        if not self.credentials_path.is_file():
-            raise ConfigError(f"Google credentials file not found: {self.credentials_path}")
-
-    @classmethod
-    def from_env(cls) -> GoogleConfig | None:
-        path = env("GOOGLE_CREDENTIALS")
-        if not path:
-            return None
-        return cls(
-            credentials_path=Path(path).expanduser(),
-            admin_email=env("GOOGLE_ADMIN_EMAIL"),
-            customer_id=env("GOOGLE_CUSTOMER_ID", "my_customer") or "my_customer",
-        )
 
 
 @dataclass(frozen=True)

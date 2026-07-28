@@ -15,18 +15,33 @@ from ..errors import GoogleError
 from .errors import http_error_message, is_conflict, is_not_found
 
 #: Excludes characters that are easily misread when a password is transcribed
-#: by hand into the Workspace or Clay UI: I, l, 1, O, 0.
-_PASSWORD_ALPHABET = (
-    "ABCDEFGHJKLMNPQRSTUVWXYZ" "abcdefghijkmnopqrstuvwxyz" "23456789" "!@#$%^&*-_=+"
-)
+#: by hand into the Workspace or Clay UI: I, l, 1, O, 0. Split by class so the
+#: generator can guarantee at least one of each.
+_PASSWORD_UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+_PASSWORD_LOWER = "abcdefghijkmnopqrstuvwxyz"
+_PASSWORD_DIGITS = "23456789"
+_PASSWORD_SYMBOLS = "!@#$%^&*-_=+"
+_PASSWORD_CLASSES = (_PASSWORD_UPPER, _PASSWORD_LOWER, _PASSWORD_DIGITS, _PASSWORD_SYMBOLS)
+_PASSWORD_ALPHABET = "".join(_PASSWORD_CLASSES)
 DEFAULT_PASSWORD_LENGTH = 20
 
 
 def generate_password(length: int = DEFAULT_PASSWORD_LENGTH) -> str:
-    """A cryptographically random password of ``length`` characters."""
+    """A cryptographically random password with one character from each class.
+
+    Google Workspace lets an admin enforce a strength policy requiring an upper,
+    lower, digit and symbol. Drawing every character from one combined alphabet
+    could, rarely, produce a password missing a class and be rejected. Seeding
+    one character per class first guarantees the invariant; the rest is filled
+    from the combined alphabet and the whole thing shuffled.
+    """
     if length < 12:
         raise ValueError("password length must be at least 12 characters")
-    return "".join(secrets.choice(_PASSWORD_ALPHABET) for _ in range(length))
+    rng = secrets.SystemRandom()
+    chars = [secrets.choice(cls) for cls in _PASSWORD_CLASSES]
+    chars += [secrets.choice(_PASSWORD_ALPHABET) for _ in range(length - len(chars))]
+    rng.shuffle(chars)
+    return "".join(chars)
 
 
 def get_user(service: Any, email: str) -> dict[str, Any] | None:

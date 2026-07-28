@@ -20,7 +20,7 @@ from typing import Any
 
 import typer
 
-from . import steps
+from . import __version__, steps
 from .backoff import BackoffPolicy
 from .clay import clay_steps
 from .cloudflare.client import CloudflareClient
@@ -136,9 +136,23 @@ def prompt_secret(label: str) -> str:
     return typer.prompt(label, hide_input=True)
 
 
+def _version_callback(value: bool) -> None:
+    """Print the version and exit, so a bug report can name the build."""
+    if value:
+        typer.echo(f"gwclay {__version__}")
+        raise typer.Exit()
+
+
 @app.callback()
 def main(
     ctx: typer.Context,
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show the version and exit.",
+    ),
     env_file: Path = typer.Option(Path(".env"), help="Env file to load, if present."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Report actions without making them."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts."),
@@ -295,14 +309,21 @@ def mailbox(
     local_part: str | None = typer.Option(None, help="Mailbox local part, default connect."),
     given_name: str | None = typer.Option(None, help="Given name on the account."),
     family_name: str | None = typer.Option(None, help="Family name on the account."),
+    assign_license: bool = typer.Option(
+        False, help="Assign a Workspace licence to the new mailbox."
+    ),
+    product_id: str | None = typer.Option(None, help="Licence product id (with --assign-license)."),
+    sku_id: str | None = typer.Option(None, help="Licence SKU id (with --assign-license)."),
 ) -> None:
     """Step 4: create the sending mailbox on DOMAIN."""
     cli: CliContext = ctx.obj
     state = cli.state_for(domain)
     config = _mailbox_config(local_part, given_name, family_name)
+    scopes = _mailbox_scopes(assign_license, product_id, sku_id)
 
+    directory = gauth.directory_service(cli.credentials(scopes=scopes))
     email, password, _ = steps.create_mailbox(
-        cli.directory(), domain, config, state, dry_run=cli.dry_run, echo=echo
+        directory, domain, config, state, dry_run=cli.dry_run, echo=echo
     )
     if password:
         typer.echo("")
@@ -311,6 +332,17 @@ def mailbox(
         )
         typer.secho(f"  {email}  {password}", bold=True)
         typer.echo("Put it in your password manager now.")
+
+    if assign_license:
+        steps.assign_mailbox_license(
+            gauth.licensing_service(cli.credentials(scopes=scopes)),
+            email,
+            state,
+            product_id=product_id,  # type: ignore[arg-type]
+            sku_id=sku_id,  # type: ignore[arg-type]
+            dry_run=cli.dry_run,
+            echo=echo,
+        )
 
 
 @app.command()
@@ -324,6 +356,9 @@ def records(
     spf: str | None = typer.Option(None, help=f"SPF value, default: {DEFAULT_SPF_VALUE}"),
     dmarc_policy: str | None = typer.Option(None, help="none, quarantine or reject."),
     dmarc_rua: str | None = typer.Option(None, help="Aggregate report address."),
+    dmarc_pct: int | None = typer.Option(
+        None, help="Percentage of mail the DMARC policy applies to."
+    ),
     prune_stale_mx: bool = typer.Option(
         False, help="Delete MX records not in the expected set. Destructive."
     ),
@@ -332,7 +367,7 @@ def records(
     """Step 5a: publish MX, SPF and DMARC. DKIM is the separate dkim command."""
     cli: CliContext = ctx.obj
     state = cli.state_for(domain)
-    config = _dns_config(mx_mode, spf, dmarc_policy, dmarc_rua, None)
+    config = _dns_config(mx_mode, spf, dmarc_policy, dmarc_rua, None, dmarc_pct)
 
     typer.echo(f"Publishing mail records for {domain} (MX mode: {config.mx_mode})")
     steps.publish_mail_records(
@@ -463,6 +498,7 @@ def status(
     for step, step_status in state.summary():
         colour = {
             "done": typer.colors.GREEN,
+            "failed": typer.colors.RED,
             "skipped": typer.colors.YELLOW,
             "pending": None,
         }.get(step_status)
@@ -485,6 +521,8 @@ def checklist(
     mailbox_config = _mailbox_config(local_part, None, None)
 
     specs = steps.build_mail_specs(domain, dns_config)
+    # Read-only: the checklist reports state, it must not overwrite the recorded
+    # verification result with a fresh single-attempt check.
     report = steps.verify_records(
         domain,
         dns_config,
@@ -492,6 +530,7 @@ def checklist(
         lookup=cli.lookup(),
         policy=BackoffPolicy(attempts=1),
         dry_run=cli.dry_run,
+        record_state=False,
         echo=echo,
     )
     summary = RunSummary(
@@ -518,29 +557,49 @@ def run(
     mx_mode: str | None = typer.Option(None, help="single or legacy."),
     dmarc_policy: str | None = typer.Option(None, help="none, quarantine or reject."),
     dmarc_rua: str | None = typer.Option(None, help="Aggregate report address."),
+    dmarc_pct: int | None = typer.Option(
+        None, help="Percentage of mail the DMARC policy applies to."
+    ),
     selector: str | None = typer.Option(None, help="DKIM selector."),
+    daily_limit: int = typer.Option(
+        20, help="Starting daily send limit to record in the Clay CSV."
+    ),
     create_zone: bool = typer.Option(False, help="Create the Cloudflare zone if absent."),
+    skip_purchase: bool = typer.Option(
+        False,
+        help="Skip registration for a domain registered outside Cloudflare. "
+        "Pair with --create-zone so the DNS steps can create the zone.",
+    ),
+    assign_license: bool = typer.Option(
+        False, help="Assign a Workspace licence to the new mailbox."
+    ),
+    product_id: str | None = typer.Option(None, help="Licence product id (with --assign-license)."),
+    sku_id: str | None = typer.Option(None, help="Licence SKU id (with --assign-license)."),
     write_credentials: bool = typer.Option(
         False, help="Include the mailbox password in the checklist file."
     ),
 ) -> None:
     """Run every step in order, pausing where a person is required."""
     cli: CliContext = ctx.obj
-    dns_config = _dns_config(mx_mode, None, dmarc_policy, dmarc_rua, selector)
+    dns_config = _dns_config(mx_mode, None, dmarc_policy, dmarc_rua, selector, dmarc_pct)
     mailbox_config = _mailbox_config(local_part, None, None)
+    scopes = _mailbox_scopes(assign_license, product_id, sku_id)
 
     target = domain or _choose_domain(cli, seed)
     state = cli.state_for(target)
     typer.echo("")
 
     _section("Step 2: register the domain")
-    if not state.is_done(STEP_REGISTER):
+    if skip_purchase:
+        state.mark_skipped(STEP_REGISTER, "registered outside Cloudflare (--skip-purchase)")
+        typer.echo("skipped: domain registered outside Cloudflare")
+    elif not state.is_done(STEP_REGISTER):
         purchase(ctx, domain=target, years=None)
     else:
         typer.echo("already registered")
 
     _section("Step 3: Workspace secondary domain and ownership verification")
-    directory = cli.directory()
+    directory = gauth.directory_service(cli.credentials(scopes=scopes))
     steps.add_workspace_domain(
         directory, target, state, customer_id=cli.customer_id, dry_run=cli.dry_run, echo=echo
     )
@@ -565,6 +624,17 @@ def run(
     if password:
         typer.secho(f"  password for {email}: {password}", bold=True)
         typer.echo("  Save it now: it is not written to the run state.")
+
+    if assign_license:
+        steps.assign_mailbox_license(
+            gauth.licensing_service(cli.credentials(scopes=scopes)),
+            email,
+            state,
+            product_id=product_id,  # type: ignore[arg-type]
+            sku_id=sku_id,  # type: ignore[arg-type]
+            dry_run=cli.dry_run,
+            echo=echo,
+        )
 
     _section("Step 5a: MX, SPF and DMARC")
     specs, _ = steps.publish_mail_records(
@@ -622,6 +692,7 @@ def run(
         mailbox_config,
         state,
         output_dir=cli.paths.output_dir,
+        daily_limit=daily_limit,
         dry_run=cli.dry_run,
         echo=echo,
     )
@@ -698,6 +769,7 @@ def _dns_config(
     dmarc_policy: str | None,
     dmarc_rua: str | None,
     selector: str | None,
+    dmarc_pct: int | None = None,
 ) -> DnsConfig:
     base = DnsConfig.from_env()
     return DnsConfig(
@@ -706,8 +778,23 @@ def _dns_config(
         dkim_selector=selector or base.dkim_selector,
         dmarc_policy=dmarc_policy or base.dmarc_policy,
         dmarc_rua=dmarc_rua or base.dmarc_rua,
-        dmarc_pct=base.dmarc_pct,
+        dmarc_pct=base.dmarc_pct if dmarc_pct is None else dmarc_pct,
     )
+
+
+def _mailbox_scopes(
+    assign_license: bool, product_id: str | None, sku_id: str | None
+) -> tuple[str, ...]:
+    """The Google scopes a mailbox run needs, plus licensing only when asked.
+
+    Requesting the licensing scope only on demand keeps the consent minimal for
+    the common case that does not assign a licence.
+    """
+    if not assign_license:
+        return gauth.ADMIN_SCOPES
+    if not (product_id and sku_id):
+        raise ConfigError("--assign-license requires --product-id and --sku-id")
+    return gauth.ADMIN_SCOPES + gauth.LICENSING_SCOPES
 
 
 def _optional_path(value: str | Path | None) -> Path | None:

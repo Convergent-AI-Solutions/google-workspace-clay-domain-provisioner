@@ -32,7 +32,7 @@ automatable part of each and hands you the rest with the exact values you need.
 
 | Step | Status | How |
 | --- | --- | --- |
-| 1. Suggest available `.com` domains | Automated | Cloudflare Registrar `domain-search` and `domain-check` |
+| 1. Suggest available `.com` domains | Automated | Cloudflare Registrar `domain-check` (queried against the registry, authoritative) |
 | 2. Register the domain | Automated | Cloudflare Registrar `registrations` |
 | 3. Add as a Workspace secondary domain and verify ownership | Automated | Admin SDK `domains.insert`, then the Site Verification API with a DNS TXT token |
 | 4. Create the sending mailbox | Automated | Admin SDK `users.insert` |
@@ -59,9 +59,10 @@ consequences:
 
 - The CSV column names in
   [`clay.py`](src/google_workspace_clay_provisioner/clay.py) are a starting
-  point, not a verified contract. Clay does not publish its upload schema. Check
-  them against the upload dialog the first time, then pin whatever it actually
-  asks for.
+  point, not a verified contract. As of 2026-07 Clay does not publish its upload
+  schema and these column names remain unconfirmed against a live upload dialog.
+  Check them the first time, then pin whatever it actually asks for. Until then,
+  prefer the Google OAuth route, which does not depend on this schema.
 - The SMTP password cannot be filled in automatically. Gmail SMTP needs an app
   password, app passwords require 2-step verification on the account, and Google
   exposes no API for creating one. The CSV ships a placeholder.
@@ -213,6 +214,19 @@ gwclay verify getexample.com
 gwclay clay getexample.com
 ```
 
+### A domain you already own elsewhere
+
+If the domain is registered somewhere other than Cloudflare, skip registration
+and let the DNS steps create the Cloudflare zone:
+
+```bash
+gwclay run example.com --domain getexample.com --skip-purchase --create-zone
+```
+
+`--skip-purchase` records step 2 as skipped instead of attempting a registration
+the registry would reject as taken, and `--create-zone` creates the zone the
+later DNS writes need.
+
 ### Check where a domain got to
 
 ```bash
@@ -290,8 +304,9 @@ judgements, and record matching all have unit tests, plus Hypothesis property
 tests for the parts where an off-by-one character would silently break mail
 authentication. Property tests skip cleanly if Hypothesis is not installed.
 
-Verified on Python 3.12.10. The CI matrix declares 3.11, 3.12 and 3.13, and has
-not yet run.
+Verified on Python 3.12.10. The CI matrix declares 3.11 and 3.12, matching the
+package classifiers, and has not yet run because GitHub Actions is blocked at the
+organisation level.
 
 ## Contributing
 
