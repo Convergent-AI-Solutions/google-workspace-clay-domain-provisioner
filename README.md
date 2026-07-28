@@ -293,6 +293,18 @@ authentication. Property tests skip cleanly if Hypothesis is not installed.
 Verified on Python 3.12.10. The CI matrix declares 3.11, 3.12 and 3.13, and has
 not yet run.
 
+## Contributing
+
+Bug reports, feature requests, and pull requests are welcome. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for how to set up a development
+environment and what to check before opening a pull request. Everyone
+participating is expected to follow the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+Found a security issue, especially one involving credential handling or DNS
+record writes? Please report it privately per [SECURITY.md](SECURITY.md)
+rather than opening a public issue.
+
 ## Licence
 
 MIT. See [LICENSE](LICENSE).
