@@ -17,9 +17,10 @@ Cloudflare API tokens, Google Workspace service-account keys or OAuth
 client secrets, generated mailbox passwords, and DKIM key material pasted
 from the Admin console. Reports about any of the following are in scope:
 
-- Credentials or secrets being logged, written to
-  `.provisioner-state/<domain>.json`, or otherwise persisted where
-  `.env` and the state file are not.
+- Credentials or secrets appearing anywhere other than `.env` (gitignored,
+  supplied by you) — for example printed to logs or written into
+  `.provisioner-state/<domain>.json`, which is designed to hold only
+  non-secret progress state.
 - DNS record writes that could overwrite or weaken an unrelated record
   (for example, clobbering an SPF or Google site-verification TXT record
   at the zone apex).
